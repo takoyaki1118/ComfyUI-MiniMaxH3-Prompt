@@ -44,6 +44,28 @@ except Exception as e:
     print(f"Error initializing MiniMax-H3 Char Ref + Motion Prompt Generator node: {e}")
     traceback.print_exc()
 
+# 4. LLMヘルパー（System Prompt Builder & Output Parser）ノードの初期化
+try:
+    try:
+        from .minimax_h3_llm_helper import (
+            MinimaxH3SystemPromptBuilder,
+            MinimaxH3LLMOutputParser,
+        )
+    except ImportError:
+        from minimax_h3_llm_helper import (
+            MinimaxH3SystemPromptBuilder,
+            MinimaxH3LLMOutputParser,
+        )
+
+    NODE_CLASS_MAPPINGS["MinimaxH3SystemPromptBuilder"] = MinimaxH3SystemPromptBuilder
+    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3SystemPromptBuilder"] = "MiniMax-H3 System Prompt Builder"
+
+    NODE_CLASS_MAPPINGS["MinimaxH3LLMOutputParser"] = MinimaxH3LLMOutputParser
+    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3LLMOutputParser"] = "MiniMax-H3 LLM Output Parser"
+except Exception as e:
+    print(f"Error initializing MiniMax-H3 LLM Helper nodes: {e}")
+    traceback.print_exc()
+
 print(f"Successfully initialized {len(NODE_CLASS_MAPPINGS)} nodes for MiniMax-H3 Prompt Generator.")
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

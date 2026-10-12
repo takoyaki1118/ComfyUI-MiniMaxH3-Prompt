@@ -1,4 +1,10 @@
-import re
+try:
+    from .common import collect_shots, resolve_music, clean_prompt
+except ImportError:
+    from common import collect_shots, resolve_music, clean_prompt
+
+SUBJECT_TYPES = ["woman", "man", "girl", "boy", "character", "person"]
+_POSSESSIVE = {"woman": "her", "girl": "her", "man": "his", "boy": "his"}
 
 
 class MinimaxH3PromptGenerator:
@@ -76,7 +82,13 @@ class MinimaxH3PromptGenerator:
                     "default": "",
                     "placeholder": "【Shot 4】4カット目。\n例: 引きの画角。<Subject 1>がベンチで遠くの海を眺める"
                 }),
-            }
+            },
+            "optional": {
+                "subject_type": (SUBJECT_TYPES, {
+                    "default": "woman",
+                    "tooltip": "<Subject 1> の種別。代名詞(her/his/their)も連動します"
+                }),
+            },
         }
 
     RETURN_TYPES = ("STRING",)
@@ -89,40 +101,32 @@ class MinimaxH3PromptGenerator:
         subject1_extra, has_male, male_role, male_retention_desc,
         enable_music, music_text,
         shot1_enable, shot1_text, shot2_enable, shot2_text,
-        shot3_enable, shot3_text, shot4_enable, shot4_text
+        shot3_enable, shot3_text, shot4_enable, shot4_text,
+        subject_type="woman",
     ):
-        # 1. 有効な Shot の収集とフォーマット化
-        shot_inputs = [
-            (1, shot1_enable, shot1_text),
-            (2, shot2_enable, shot2_text),
-            (3, shot3_enable, shot3_text),
-            (4, shot4_enable, shot4_text),
-        ]
+        # 1. 有効な Shot を連番化して整形
+        formatted_shots, active_shot_names = collect_shots([
+            (shot1_enable, shot1_text),
+            (shot2_enable, shot2_text),
+            (shot3_enable, shot3_text),
+            (shot4_enable, shot4_text),
+        ])
 
-        formatted_shots = []
-        active_shot_names = []
-
-        for num, enabled, text in shot_inputs:
-            clean_text = text.strip()
-            if enabled and clean_text:
-                active_shot_names.append(f"[Shot {num}]")
-                # "[Shot X]" 接頭辞が含まれていない場合は自動付与
-                if not clean_text.startswith(f"[Shot {num}]"):
-                    clean_text = f"[Shot {num}] {clean_text}"
-                formatted_shots.append(clean_text)
-
-        # Shotが何も有効化されていない場合のフォールバック
         if not formatted_shots:
-            formatted_shots.append("[Shot 1] The shot begins from <Picture 1>.")
-            active_shot_names.append("[Shot 1]")
+            formatted_shots = ["[Shot 1] The shot begins from <Picture 1>."]
+            active_shot_names = ["[Shot 1]"]
 
         shots_content = "\n\n".join(formatted_shots)
         shot_list_str = ", ".join(active_shot_names)
 
-        # 2. Subject 1 補足定義
-        sub1_extra_formatted = f" {subject1_extra.strip()}" if subject1_extra.strip() else ""
+        # 2. 種別・代名詞
+        poss = _POSSESSIVE.get(subject_type, "their")
 
-        # 3. 男性（Subject 2）定義・保持設定（空欄時は英語の既定文を使用）
+        # 3. Subject 1 補足定義
+        extra = subject1_extra.strip()
+        sub1_extra_formatted = f" {extra}" if extra else ""
+
+        # 4. 男性（Subject 2）定義・保持設定
         if has_male:
             role = male_role.strip() or "male POV hands visible in frame"
             retention = male_retention_desc.strip() or \
@@ -133,13 +137,10 @@ class MinimaxH3PromptGenerator:
             male_def_str = ""
             male_ret_str = ""
 
-        # 4. Music 設定
-        if enable_music and music_text.strip():
-            final_music = music_text.strip()
-        else:
-            final_music = "N/A"
+        # 5. Music
+        final_music = resolve_music(enable_music, music_text)
 
-        # 5. 空欄の項目は文ごと省略
+        # 6. 空欄の項目は文ごと省略
         action = summary_action.strip()
         action_str = f" of <Subject 1> {action}" if action else " of <Subject 1>"
 
@@ -148,15 +149,15 @@ class MinimaxH3PromptGenerator:
 
         sound = soundscape.strip() or "N/A"
 
-        # 6. プロンプトテンプレートの組み立て
+        # 7. テンプレート組み立て
         prompt = f"""subject_definitions:
-<Subject 1> is the woman in <Picture 1>, with the exact face, the exact hair, the exact clothing, skin tone, and body proportions of <Picture 1>.{sub1_extra_formatted}
+<Subject 1> is the {subject_type} in <Picture 1>, with the exact face, the exact hair, the exact clothing, skin tone, and body proportions of <Picture 1>.{sub1_extra_formatted}
 <Picture 1> is the first frame of [Shot 1], showing <Subject 1> in the exact pose, framing, and composition of the reference image.{male_def_str}
 
 summary: [keyframe completion + reference generation] The target video starts from the exact first frame of <Picture 1> and continues forward as a continuous video{action_str}. The appearance, pose, and framing of <Subject 1> at the beginning are locked to <Picture 1>.
 
 retention_analysis:
-<Subject 1> (appears in {shot_list_str}): fully_preserved - her face, hair, clothing, skin tone, and body from <Picture 1> remain constant throughout; only expression, pose, and movement change as described.
+<Subject 1> (appears in {shot_list_str}): fully_preserved - {poss} face, hair, clothing, skin tone, and body from <Picture 1> remain constant throughout; only expression, pose, and movement change as described.
 <Picture 1> ([Shot 1] first frame): fully_preserved - the target video opens on the exact composition, pose, framing, lighting, and subject appearance of <Picture 1>.{male_ret_str}
 
 detailed_description:
@@ -165,7 +166,4 @@ detailed_description:
 overall_soundscape: {sound}
 non_diegetic_music: {final_music}"""
 
-        # 連続した空行を整形
-        clean_prompt = re.sub(r'\n{3,}', '\n\n', prompt).strip()
-
-        return (clean_prompt,)
+        return (clean_prompt(prompt),)

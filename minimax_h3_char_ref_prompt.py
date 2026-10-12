@@ -1,4 +1,7 @@
-import re
+try:
+    from .common import collect_shots, resolve_music, clean_prompt
+except ImportError:
+    from common import collect_shots, resolve_music, clean_prompt
 
 
 class MinimaxH3CharRefPromptGenerator:
@@ -86,50 +89,32 @@ class MinimaxH3CharRefPromptGenerator:
         shot1_enable, shot1_text, shot2_enable, shot2_text,
         shot3_enable, shot3_text, shot4_enable, shot4_text
     ):
-        # 1. 有効な Shot の収集とフォーマット化
-        shot_inputs = [
-            (1, shot1_enable, shot1_text),
-            (2, shot2_enable, shot2_text),
-            (3, shot3_enable, shot3_text),
-            (4, shot4_enable, shot4_text),
-        ]
-
-        formatted_shots = []
-        active_shot_names = []
-
-        for num, enabled, text in shot_inputs:
-            clean_text = text.strip()
-            if enabled and clean_text:
-                active_shot_names.append(f"[Shot {num}]")
-                if not clean_text.startswith(f"[Shot {num}]"):
-                    clean_text = f"[Shot {num}] {clean_text}"
-                formatted_shots.append(clean_text)
+        # 1. 有効な Shot を連番化して整形
+        formatted_shots, active_shot_names = collect_shots([
+            (shot1_enable, shot1_text),
+            (shot2_enable, shot2_text),
+            (shot3_enable, shot3_text),
+            (shot4_enable, shot4_text),
+        ])
 
         if not formatted_shots:
-            formatted_shots.append("[Shot 1] <Subject 1> appears in the scene.")
-            active_shot_names.append("[Shot 1]")
+            formatted_shots = ["[Shot 1] <Subject 1> appears in the scene."]
+            active_shot_names = ["[Shot 1]"]
 
         shots_content = "\n\n".join(formatted_shots)
         shot_list_str = ", ".join(active_shot_names)
 
-        # 2. 衣服情報の有無に応じた文字列の切り替え
-        if include_clothing:
-            subject_clothing_part = ", clothing"
-            retention_clothing_part = ", clothing"
-        else:
-            subject_clothing_part = ""
-            retention_clothing_part = ""
+        # 2. 衣服情報の有無
+        clothing_part = ", clothing" if include_clothing else ""
 
-        # 3. Character 補足定義
-        char_extra_formatted = f" {character_extra.strip()}" if character_extra.strip() else ""
+        # 3. Character 補足
+        extra = character_extra.strip()
+        char_extra_formatted = f" {extra}" if extra else ""
 
-        # 4. Music 設定
-        if enable_music and music_text.strip():
-            final_music = music_text.strip()
-        else:
-            final_music = "N/A"
+        # 4. Music
+        final_music = resolve_music(enable_music, music_text)
 
-        # 5. 各種テキストの整理
+        # 5. 各種テキスト
         action = summary_action.strip()
         action_str = f" of <Subject 1> {action}" if action else " of <Subject 1>"
 
@@ -138,15 +123,15 @@ class MinimaxH3CharRefPromptGenerator:
 
         sound = soundscape.strip() or "N/A"
 
-        # 6. プロンプトテンプレートの組み立て
+        # 6. テンプレート
         prompt = f"""subject_definitions:
-<Subject 1> is the character depicted in the character reference images (<Picture 1>, showing full-body and close-up face views), maintaining the exact face, hair{subject_clothing_part}, skin tone, and body proportions of the reference.{char_extra_formatted}
+<Subject 1> is the character depicted in the character reference images (<Picture 1>, showing full-body and close-up face views), maintaining the exact face, hair{clothing_part}, skin tone, and body proportions of the reference.{char_extra_formatted}
 The reference images provide the definitive character design sheet for <Subject 1>.
 
 summary: [character consistency generation] The target video generates a sequence featuring <Subject 1> based on the character reference images{action_str}. The appearance, facial features, and styling of <Subject 1> are strictly locked to the character reference.
 
 retention_analysis:
-<Subject 1> (appears in {shot_list_str}): fully_preserved - the exact face, hair{retention_clothing_part}, and body proportions from the character reference images remain entirely consistent across all active shots; only expressions, poses, and movements change as described.
+<Subject 1> (appears in {shot_list_str}): fully_preserved - the exact face, hair{clothing_part}, and body proportions from the character reference images remain entirely consistent across all active shots; only expressions, poses, and movements change as described.
 
 detailed_description:
 {camera_line}{shots_content}
@@ -154,6 +139,4 @@ detailed_description:
 overall_soundscape: {sound}
 non_diegetic_music: {final_music}"""
 
-        clean_prompt = re.sub(r'\n{3,}', '\n\n', prompt).strip()
-
-        return (clean_prompt,)
+        return (clean_prompt(prompt),)

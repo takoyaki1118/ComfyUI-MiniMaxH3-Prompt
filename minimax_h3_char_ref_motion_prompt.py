@@ -1,4 +1,9 @@
-import re
+try:
+    from .common import collect_shots, resolve_music, clean_prompt
+except ImportError:
+    from common import collect_shots, resolve_music, clean_prompt
+
+VIDEO_REF_SUFFIX = "(following the motion and timing of <Video 1>)"
 
 
 class MinimaxH3CharRefMotionPromptGenerator:
@@ -38,7 +43,7 @@ class MinimaxH3CharRefMotionPromptGenerator:
                 "motion_video_desc": ("STRING", {
                     "multiline": True,
                     "default": "",
-                    "placeholder": "【参照動画の動き】use_motion_video ON のとき使用。\n例: 手を振る動作とカメラのゆっくりとしたパン"
+                    "placeholder": "【参照動画の動き（任意）】use_motion_video ON のとき使用。空でも <Video 1> は有効です。\n例: 手を振る動作とカメラのゆっくりとしたパン"
                 }),
 
                 # Character Reference 特記事項
@@ -84,7 +89,13 @@ class MinimaxH3CharRefMotionPromptGenerator:
                     "default": "",
                     "placeholder": "【Shot 4】4カット目。\n例: 別アングルから。<Subject 1>が振り返って手を振る"
                 }),
-            }
+            },
+            "optional": {
+                "auto_append_video_ref": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "ON: <Video 1> への言及がない各Shotの末尾に、参照動画に従う旨の英文を自動追記します"
+                }),
+            },
         }
 
     RETURN_TYPES = ("STRING",)
@@ -97,68 +108,67 @@ class MinimaxH3CharRefMotionPromptGenerator:
         include_clothing, use_motion_video, motion_video_desc,
         character_extra, enable_music, music_text,
         shot1_enable, shot1_text, shot2_enable, shot2_text,
-        shot3_enable, shot3_text, shot4_enable, shot4_text
+        shot3_enable, shot3_text, shot4_enable, shot4_text,
+        auto_append_video_ref=True,
     ):
-        # 1. 有効な Shot の収集とフォーマット化
-        shot_inputs = [
-            (1, shot1_enable, shot1_text),
-            (2, shot2_enable, shot2_text),
-            (3, shot3_enable, shot3_text),
-            (4, shot4_enable, shot4_text),
-        ]
+        # 参照動画の有効判定はスイッチのみ（説明文は任意）
+        use_video = bool(use_motion_video)
 
-        formatted_shots = []
-        active_shot_names = []
-
-        for num, enabled, text in shot_inputs:
-            clean_text = text.strip()
-            if enabled and clean_text:
-                active_shot_names.append(f"[Shot {num}]")
-                
-                # モーションビデオ有効時、各Shotに参照指示がなければ自然に補完する
-                if use_motion_video and motion_video_desc.strip():
-                    if "<Video 1>" not in clean_text:
-                        clean_text = f"{clean_text} (following the motion and timing of <Video 1>)"
-
-                if not clean_text.startswith(f"[Shot {num}]"):
-                    clean_text = f"[Shot {num}] {clean_text}"
-                formatted_shots.append(clean_text)
+        # 1. 有効な Shot を連番化して整形
+        formatted_shots, active_shot_names = collect_shots(
+            [
+                (shot1_enable, shot1_text),
+                (shot2_enable, shot2_text),
+                (shot3_enable, shot3_text),
+                (shot4_enable, shot4_text),
+            ],
+            append_suffix=VIDEO_REF_SUFFIX if (use_video and auto_append_video_ref) else None,
+            skip_if_contains="<Video 1>",
+        )
 
         if not formatted_shots:
-            fallback_text = "[Shot 1] <Subject 1> appears in the scene."
-            if use_motion_video and motion_video_desc.strip():
-                fallback_text += " following the movement of <Video 1>."
-            formatted_shots.append(fallback_text)
-            active_shot_names.append("[Shot 1]")
+            fallback = "[Shot 1] <Subject 1> appears in the scene."
+            if use_video:
+                fallback += " The movement follows <Video 1>."
+            formatted_shots = [fallback]
+            active_shot_names = ["[Shot 1]"]
 
         shots_content = "\n\n".join(formatted_shots)
         shot_list_str = ", ".join(active_shot_names)
 
-        # 2. 衣服情報の有無に応じた文字列の切り替え
-        if include_clothing:
-            subject_clothing_part = ", clothing"
-            retention_clothing_part = ", clothing"
-        else:
-            subject_clothing_part = ""
-            retention_clothing_part = ""
+        # 2. 衣服情報の有無
+        clothing_part = ", clothing" if include_clothing else ""
 
-        # 3. Character 補足定義
-        char_extra_formatted = f" {character_extra.strip()}" if character_extra.strip() else ""
+        # 3. Character 補足
+        extra = character_extra.strip()
+        char_extra_formatted = f" {extra}" if extra else ""
 
-        # 4. 参照動画（Motion Video）の有無に応じた分岐
-        if use_motion_video and motion_video_desc.strip():
-            motion_desc_clean = motion_video_desc.strip()
-            video_def = f"\n<Video 1> is the motion reference video that provides the body movement, timing, camera movement, and action rhythm to be followed by <Subject 1>. {motion_desc_clean}"
+        # 4. Music
+        final_music = resolve_music(enable_music, music_text)
+
+        # 5. 参照動画の有無に応じた分岐
+        if use_video:
+            desc = motion_video_desc.strip()
+            desc_part = f" {desc}" if desc else ""
+            video_def = (
+                "\n<Video 1> is the motion reference video that provides the body movement, "
+                "timing, camera movement, and action rhythm to be followed by <Subject 1>."
+                f"{desc_part}"
+            )
             task_type = "[character consistency generation + reference generation]"
-            summary_extra = f", while the movements, timing, and camera work are guided by <Video 1>"
-            retention_video = f"\n<Video 1> (motion, timing, and camera structure): partially_preserved - the body movements, action timing, and overall rhythm of <Video 1> are followed as closely as possible, while the character appearance is replaced by <Subject 1>."
+            summary_extra = ", while the movements, timing, and camera work are guided by <Video 1>"
+            retention_video = (
+                "\n<Video 1> (motion, timing, and camera structure): partially_preserved - "
+                "the body movements, action timing, and overall rhythm of <Video 1> are followed "
+                "as closely as possible, while the character appearance is replaced by <Subject 1>."
+            )
         else:
             video_def = ""
             task_type = "[character consistency generation]"
             summary_extra = ""
             retention_video = ""
 
-        # 5. 各種テキストの整理
+        # 6. 各種テキスト
         action = summary_action.strip()
         action_str = f" of <Subject 1> {action}" if action else " of <Subject 1>"
 
@@ -167,15 +177,15 @@ class MinimaxH3CharRefMotionPromptGenerator:
 
         sound = soundscape.strip() or "N/A"
 
-        # 6. プロンプトテンプレートの組み立て
+        # 7. テンプレート
         prompt = f"""subject_definitions:
-<Subject 1> is the character depicted in the character reference images (<Picture 1>, showing full-body and close-up face views), maintaining the exact face, hair{subject_clothing_part}, skin tone, and body proportions of the reference.{char_extra_formatted}
+<Subject 1> is the character depicted in the character reference images (<Picture 1>, showing full-body and close-up face views), maintaining the exact face, hair{clothing_part}, skin tone, and body proportions of the reference.{char_extra_formatted}
 The reference images provide the definitive character design sheet for <Subject 1>.{video_def}
 
-summary: {task_type} The target video features <Subject 1> performing the actions{action_str} based on the character reference images, strictly locking the appearance, face, hair{subject_clothing_part}, and body to the reference{summary_extra}.
+summary: {task_type} The target video features <Subject 1> performing the actions{action_str} based on the character reference images, strictly locking the appearance, face, hair{clothing_part}, and body to the reference{summary_extra}.
 
 retention_analysis:
-<Subject 1> (appears in {shot_list_str}): fully_preserved - the exact face, hair{retention_clothing_part}, and body proportions from the character reference images remain entirely consistent across all active shots; only expressions, poses, and movements change as described.{retention_video}
+<Subject 1> (appears in {shot_list_str}): fully_preserved - the exact face, hair{clothing_part}, and body proportions from the character reference images remain entirely consistent across all active shots; only expressions, poses, and movements change as described.{retention_video}
 
 detailed_description:
 {camera_line}{shots_content}
@@ -183,6 +193,4 @@ detailed_description:
 overall_soundscape: {sound}
 non_diegetic_music: {final_music}"""
 
-        clean_prompt = re.sub(r'\n{3,}', '\n\n', prompt).strip()
-
-        return (clean_prompt,)
+        return (clean_prompt(prompt),)
