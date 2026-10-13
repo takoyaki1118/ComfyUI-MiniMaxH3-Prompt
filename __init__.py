@@ -5,7 +5,7 @@ print("Initializing MiniMax-H3 Prompt Generator Nodes...")
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-# 1. 既存のファーストフレーム参照型ノード
+# 1. ファーストフレーム参照型ノード
 try:
     from .minimax_h3_prompt import MinimaxH3PromptGenerator
     NODE_CLASS_MAPPINGS["MinimaxH3PromptGenerator"] = MinimaxH3PromptGenerator

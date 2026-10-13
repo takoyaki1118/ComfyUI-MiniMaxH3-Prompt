@@ -42,23 +42,19 @@ MODE_RULES = {
         "MODE: first_frame (keyframe completion)\n"
         "- <Picture 1> is the first frame of [Shot 1]. Shot 1 must START from that exact "
         "pose, framing and composition, then continue forward naturally.\n"
-        "- Refer to the person only as <Subject 1>.\n"
-        "- Do NOT describe face, hair, clothing or body of <Subject 1>; they come from <Picture 1>."
+        "- Refer to the person only as <Subject 1>."
     ),
     "char_ref": (
         "MODE: char_ref (character reference generation)\n"
-        "- <Subject 1> is a character defined by character reference images.\n"
-        "- Describe only: environment, camera, pose, movement, expression, and interaction."
+        "- <Subject 1> is a character defined by character reference images."
     ),
     "char_ref_motion": (
         "MODE: char_ref_motion (character reference + motion reference video)\n"
-        "- <Subject 1> is the character from reference. <Video 1> is a motion reference video.\n"
-        "- Shots should explicitly say the movement follows <Video 1>."
+        "- <Subject 1> is the character from reference. <Video 1> is a motion reference video."
     ),
     "char_ref_first_frame": (
         "MODE: char_ref_first_frame (character reference sheet + first frame composition)\n"
-        "- <Picture 1> is the character reference sheet defining appearance of <Subject 1>.\n"
-        "- <Picture 2> is the exact first frame of [Shot 1], supplying starting pose and framing."
+        "- <Picture 1> is character sheet. <Picture 2> is the exact first frame of [Shot 1]."
     ),
 }
 
@@ -79,7 +75,7 @@ class MinimaxH3SystemPromptBuilder:
                 "include_music": ("BOOLEAN", {"default": False}),
             },
             "optional": {
-                "dialogue_idea": ("STRING", {"multiline": True, "default": "", "placeholder": "【セリフのアイデア（任意）】例: 1個目のカットで「やっほー！」と声をかける"}),
+                "dialogue_idea": ("STRING", {"multiline": True, "default": "", "placeholder": "【セリフのアイデア】例: 1個目のカットで「こんにちは！」と言う"}),
                 "extra_notes": ("STRING", {"multiline": True, "default": "", "placeholder": "【追加指示】"}),
                 "duration_sec": ("INT", {"default": 0, "min": 0, "max": 60, "step": 1}),
                 "attached_media": (MEDIA_OPTIONS, {"default": "none"}),
@@ -97,7 +93,8 @@ class MinimaxH3SystemPromptBuilder:
               attached_media="none", few_shot_example=False):
         
         dialogue_rule = (
-            "\n- 'dialogues': array of strings (one per shot, in order, can be empty string if no speech). Provide dialogue text in Japanese."
+            "\n- 'dialogues': array of strings (one per shot). If a shot has speech, format it EXACTLY as: "
+            "\"<Subject 1> (S1) says, <d>[Japanese] 実際のセリフ</d>\" (or empty string \"\" if no dialogue)."
             if dialogue_idea.strip() else ""
         )
         dialogue_key = ',\n  "dialogues": ["...", "..."]' if dialogue_idea.strip() else ""
@@ -108,9 +105,10 @@ The user gives a short idea. Expand it into a complete, production-ready JSON pr
 {MODE_RULES[mode]}
 
 GENERAL RULES
-- Write ALL field values in English (except dialogues if requested).
+- Write ALL field values in English (except the Japanese text inside <d>[Japanese] ...</d> if dialogues are used).
 - Each shot = ONE continuous camera setup.
-- Do NOT write "[Shot N]" prefixes inside the shot text.
+- For Shot 2 and later, include timestamps like "At 00:03.500," right after "[Shot N]".
+- Do NOT write "[Shot N]" prefixes inside the shot text itself (the system adds markers).
 - Return ONLY a single valid JSON object, no code fences.
 
 FIELDS
@@ -229,7 +227,7 @@ class MinimaxH3LLMOutputParser:
         dialogues_raw = data.get("dialogues", [])
         if isinstance(dialogues_raw, str):
             dialogues_raw = [dialogues_raw]
-        dialogues = [normalize_tags(strip_shot_prefix(str(x).strip())) for x in dialogues_raw][:4]
+        dialogues = [normalize_tags(str(x).strip()) for x in dialogues_raw][:4]
         dialogues += [""] * (4 - len(dialogues))
 
         warnings = []

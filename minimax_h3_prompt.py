@@ -1,11 +1,11 @@
 try:
     from .common import (
-        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        collect_shots, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES, _POSSESSIVE
     )
 except ImportError:
     from common import (
-        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        collect_shots, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES, _POSSESSIVE
     )
 
@@ -15,53 +15,34 @@ class MinimaxH3PromptGenerator:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "summary_action": ("STRING", {
-                    "multiline": True, "default": "",
-                    "placeholder": "【動画全体の動き】動画全体で人物が何をするかを一文で。"
-                }),
-                "camera_style": ("STRING", {
-                    "multiline": True, "default": "",
-                    "placeholder": "【カメラ・画作り】撮影方法・光・質感など。"
-                }),
-                "soundscape": ("STRING", {
-                    "multiline": True, "default": "",
-                    "placeholder": "【環境音・効果音】画面内で鳴っている音。"
-                }),
-                "subject1_extra": ("STRING", {
-                    "multiline": True, "default": "",
-                    "placeholder": "【人物の補足（任意）】"
-                }),
+                "summary_action": ("STRING", {"multiline": True, "default": "", "placeholder": "【動画全体の動き】"}),
+                "camera_style": ("STRING", {"multiline": True, "default": "", "placeholder": "【カメラ・画作り】"}),
+                "soundscape": ("STRING", {"multiline": True, "default": "", "placeholder": "【環境音・効果音】"}),
+                "subject1_extra": ("STRING", {"multiline": True, "default": "", "placeholder": "【人物の補足（任意）】"}),
                 "has_male": ("BOOLEAN", {"default": False}),
                 "male_role": ("STRING", {"default": "", "placeholder": "【男性の役割】"}),
                 "male_retention_desc": ("STRING", {"default": "", "placeholder": "【男性の保持設定】"}),
                 "enable_music": ("BOOLEAN", {"default": False}),
                 "music_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【BGM】"}),
 
-                # Shot 1
                 "shot1_enable": ("BOOLEAN", {"default": True}),
                 "shot1_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 1】本文"}),
-                "shot1_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 1】セリフ (任意)"}),
+                "shot1_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 1】セリフ"}),
 
-                # Shot 2
                 "shot2_enable": ("BOOLEAN", {"default": False}),
                 "shot2_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 2】本文"}),
-                "shot2_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 2】セリフ (任意)"}),
+                "shot2_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 2】セリフ"}),
 
-                # Shot 3
                 "shot3_enable": ("BOOLEAN", {"default": False}),
                 "shot3_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 3】本文"}),
-                "shot3_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 3】セリフ (任意)"}),
+                "shot3_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 3】セリフ"}),
 
-                # Shot 4
                 "shot4_enable": ("BOOLEAN", {"default": False}),
                 "shot4_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 4】本文"}),
-                "shot4_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 4】セリフ (任意)"}),
+                "shot4_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 4】セリフ"}),
             },
             "optional": {
-                "auto_speech_cue": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "ON: セリフがあるShotの末尾に発話キュー英文を自動付与します"
-                }),
+                "auto_speech_cue": ("BOOLEAN", {"default": True}),
                 "subject_type": (SUBJECT_TYPES, {"default": "woman"}),
             },
         }
@@ -81,27 +62,19 @@ class MinimaxH3PromptGenerator:
         shot4_enable, shot4_text, shot4_dialogue,
         auto_speech_cue=True, subject_type="woman",
     ):
-        speech_suffix = " <Subject 1> speaks a line." if auto_speech_cue else None
-
         shot_inputs = [
-            (shot1_enable, shot1_text),
-            (shot2_enable, shot2_text),
-            (shot3_enable, shot3_text),
-            (shot4_enable, shot4_text),
+            (shot1_enable, shot1_text), (shot2_enable, shot2_text),
+            (shot3_enable, shot3_text), (shot4_enable, shot4_text)
         ]
         dialogue_inputs = [
-            (shot1_enable, shot1_dialogue),
-            (shot2_enable, shot2_dialogue),
-            (shot3_enable, shot3_dialogue),
-            (shot4_enable, shot4_dialogue),
+            (shot1_enable, shot1_dialogue), (shot2_enable, shot2_dialogue),
+            (shot3_enable, shot3_dialogue), (shot4_enable, shot4_dialogue)
         ]
 
-        # セリフがある場合にsuffixをつけるための判定付きフォーマット
-        formatted_shots, active_shot_names = collect_shots(shot_inputs)
-        
-        # セリフデータの構築
-        formatted_dialogues = collect_dialogues(dialogue_inputs, shot_inputs)
-        dialogue_output = "\n".join([d for d in formatted_dialogues if d.strip()])
+        formatted_shots, active_shot_names, formatted_dialogues = collect_shots(
+            shot_inputs, dialogue_inputs, auto_speech_cue=auto_speech_cue
+        )
+        dialogue_output = "\n".join([d for d in formatted_dialogues if "<d>" in d])
 
         if not formatted_shots:
             formatted_shots = ["[Shot 1] The shot begins from <Picture 1>."]

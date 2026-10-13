@@ -1,11 +1,11 @@
 try:
     from .common import (
-        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        collect_shots, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES
     )
 except ImportError:
     from common import (
-        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        collect_shots, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES
     )
 
@@ -75,13 +75,13 @@ class MinimaxH3CharRefMotionPromptGenerator:
             (shot3_enable, shot3_dialogue), (shot4_enable, shot4_dialogue)
         ]
 
-        formatted_shots, active_shot_names = collect_shots(
-            shot_inputs,
+        formatted_shots, active_shot_names, formatted_dialogues = collect_shots(
+            shot_inputs, dialogue_inputs,
             append_suffix=VIDEO_REF_SUFFIX if (use_video and auto_append_video_ref) else None,
             skip_if_contains="<Video 1>",
+            auto_speech_cue=auto_speech_cue
         )
-        formatted_dialogues = collect_dialogues(dialogue_inputs, shot_inputs)
-        dialogue_output = "\n".join([d for d in formatted_dialogues if d.strip()])
+        dialogue_output = "\n".join([d for d in formatted_dialogues if "<d>" in d])
 
         if not formatted_shots:
             fallback = "[Shot 1] <Subject 1> appears in the scene."
