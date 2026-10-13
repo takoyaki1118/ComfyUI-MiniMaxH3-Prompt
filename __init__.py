@@ -69,3 +69,16 @@ except Exception as e:
 print(f"Successfully initialized {len(NODE_CLASS_MAPPINGS)} nodes for MiniMax-H3 Prompt Generator.")
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
+
+# 5. キャラクターリファレンス ＋ ファーストフレーム指定型ノードの初期化
+try:
+    try:
+        from .minimax_h3_char_ref_first_frame_prompt import MinimaxH3CharRefFirstFramePromptGenerator
+    except ImportError:
+        from minimax_h3_char_ref_first_frame_prompt import MinimaxH3CharRefFirstFramePromptGenerator
+
+    NODE_CLASS_MAPPINGS["MinimaxH3CharRefFirstFramePromptGenerator"] = MinimaxH3CharRefFirstFramePromptGenerator
+    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3CharRefFirstFramePromptGenerator"] = "MiniMax-H3 Char Ref + First Frame Prompt Generator"
+except Exception as e:
+    print(f"Error initializing MiniMax-H3 Char Ref + First Frame Prompt Generator node: {e}")
+    traceback.print_exc()
