@@ -1,10 +1,13 @@
 try:
-    from .common import collect_shots, resolve_music, clean_prompt
+    from .common import (
+        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        normalize_tags, SUBJECT_TYPES, _POSSESSIVE
+    )
 except ImportError:
-    from common import collect_shots, resolve_music, clean_prompt
-
-SUBJECT_TYPES = ["woman", "man", "girl", "boy", "character", "person"]
-_POSSESSIVE = {"woman": "her", "girl": "her", "man": "his", "boy": "his"}
+    from common import (
+        collect_shots, collect_dialogues, resolve_music, clean_prompt,
+        normalize_tags, SUBJECT_TYPES, _POSSESSIVE
+    )
 
 
 class MinimaxH3PromptGenerator:
@@ -13,86 +16,58 @@ class MinimaxH3PromptGenerator:
         return {
             "required": {
                 "summary_action": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【動画全体の動き】動画全体で人物が何をするかを一文で。\n例: ゆっくり前に歩いてきて、優しく微笑みながらベンチに座る"
+                    "multiline": True, "default": "",
+                    "placeholder": "【動画全体の動き】動画全体で人物が何をするかを一文で。"
                 }),
                 "camera_style": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【カメラ・画作り】撮影方法・光・質感など。\n例: シネマティックな照明、35mm手持ちカメラ、自然なボケ味"
+                    "multiline": True, "default": "",
+                    "placeholder": "【カメラ・画作り】撮影方法・光・質感など。"
                 }),
                 "soundscape": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【環境音・効果音】画面内で鳴っている音。\n例: 風の音、遠くの波の音、砂利を踏む足音"
+                    "multiline": True, "default": "",
+                    "placeholder": "【環境音・効果音】画面内で鳴っている音。"
                 }),
-
-                # Subject 1 特記事項
                 "subject1_extra": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【人物の補足（任意）】参照画像だけでは足りない特徴があれば。\n例: 右手に小さな革のバッグを持っている"
+                    "multiline": True, "default": "",
+                    "placeholder": "【人物の補足（任意）】"
                 }),
-
-                # 男性（Subject 2）フラグ＆設定
                 "has_male": ("BOOLEAN", {"default": False}),
-                "male_role": ("STRING", {
-                    "default": "",
-                    "placeholder": "【男性の役割】has_male ON のとき使用。空なら「男性の主観視点の手」になります。\n例: 向かいに座る男性の腕"
-                }),
-                "male_retention_desc": ("STRING", {
-                    "default": "",
-                    "placeholder": "【男性の保持設定】空なら「手が自然に絡む（部分保持）」になります。\n例: 手のみ映る。顔は映さない"
-                }),
-
-                # BGM 設定
+                "male_role": ("STRING", {"default": "", "placeholder": "【男性の役割】"}),
+                "male_retention_desc": ("STRING", {"default": "", "placeholder": "【男性の保持設定】"}),
                 "enable_music": ("BOOLEAN", {"default": False}),
-                "music_text": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【BGM】enable_music ON のとき使用。\n例: 穏やかなアコースティックギターのBGM"
-                }),
+                "music_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【BGM】"}),
 
-                # Shot 1 ~ Shot 4 設定
+                # Shot 1
                 "shot1_enable": ("BOOLEAN", {"default": True}),
-                "shot1_text": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【Shot 1】最初のカット。冒頭は参照画像(<Picture 1>)から始まります。\n人物は <Subject 1> と書くと参照画像の人物として扱われます。\n例: <Picture 1>から始まる。<Subject 1>がカメラの方に軽く顔を向け、ゆっくり3歩前に進んで微笑む"
-                }),
+                "shot1_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 1】本文"}),
+                "shot1_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 1】セリフ (任意)"}),
 
+                # Shot 2
                 "shot2_enable": ("BOOLEAN", {"default": False}),
-                "shot2_text": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【Shot 2】2カット目（カメラ切り替え後）。\n例: ミディアムクローズアップに切り替わる。<Subject 1>は歩き続け、周囲を見回す"
-                }),
+                "shot2_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 2】本文"}),
+                "shot2_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 2】セリフ (任意)"}),
 
+                # Shot 3
                 "shot3_enable": ("BOOLEAN", {"default": False}),
-                "shot3_text": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【Shot 3】3カット目。\n例: カメラが滑らかにパンする。<Subject 1>が木のベンチに近づき、優雅に座る"
-                }),
+                "shot3_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 3】本文"}),
+                "shot3_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 3】セリフ (任意)"}),
 
+                # Shot 4
                 "shot4_enable": ("BOOLEAN", {"default": False}),
-                "shot4_text": ("STRING", {
-                    "multiline": True,
-                    "default": "",
-                    "placeholder": "【Shot 4】4カット目。\n例: 引きの画角。<Subject 1>がベンチで遠くの海を眺める"
-                }),
+                "shot4_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 4】本文"}),
+                "shot4_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 4】セリフ (任意)"}),
             },
             "optional": {
-                "subject_type": (SUBJECT_TYPES, {
-                    "default": "woman",
-                    "tooltip": "<Subject 1> の種別。代名詞(her/his/their)も連動します"
+                "auto_speech_cue": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "ON: セリフがあるShotの末尾に発話キュー英文を自動付与します"
                 }),
+                "subject_type": (SUBJECT_TYPES, {"default": "woman"}),
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("prompt",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("prompt", "dialogue")
     FUNCTION = "generate_prompt"
     CATEGORY = "MiniMaxH3"
 
@@ -100,17 +75,33 @@ class MinimaxH3PromptGenerator:
         self, summary_action, camera_style, soundscape,
         subject1_extra, has_male, male_role, male_retention_desc,
         enable_music, music_text,
-        shot1_enable, shot1_text, shot2_enable, shot2_text,
-        shot3_enable, shot3_text, shot4_enable, shot4_text,
-        subject_type="woman",
+        shot1_enable, shot1_text, shot1_dialogue,
+        shot2_enable, shot2_text, shot2_dialogue,
+        shot3_enable, shot3_text, shot3_dialogue,
+        shot4_enable, shot4_text, shot4_dialogue,
+        auto_speech_cue=True, subject_type="woman",
     ):
-        # 1. 有効な Shot を連番化して整形
-        formatted_shots, active_shot_names = collect_shots([
+        speech_suffix = " <Subject 1> speaks a line." if auto_speech_cue else None
+
+        shot_inputs = [
             (shot1_enable, shot1_text),
             (shot2_enable, shot2_text),
             (shot3_enable, shot3_text),
             (shot4_enable, shot4_text),
-        ])
+        ]
+        dialogue_inputs = [
+            (shot1_enable, shot1_dialogue),
+            (shot2_enable, shot2_dialogue),
+            (shot3_enable, shot3_dialogue),
+            (shot4_enable, shot4_dialogue),
+        ]
+
+        # セリフがある場合にsuffixをつけるための判定付きフォーマット
+        formatted_shots, active_shot_names = collect_shots(shot_inputs)
+        
+        # セリフデータの構築
+        formatted_dialogues = collect_dialogues(dialogue_inputs, shot_inputs)
+        dialogue_output = "\n".join([d for d in formatted_dialogues if d.strip()])
 
         if not formatted_shots:
             formatted_shots = ["[Shot 1] The shot begins from <Picture 1>."]
@@ -119,37 +110,27 @@ class MinimaxH3PromptGenerator:
         shots_content = "\n\n".join(formatted_shots)
         shot_list_str = ", ".join(active_shot_names)
 
-        # 2. 種別・代名詞
         poss = _POSSESSIVE.get(subject_type, "their")
-
-        # 3. Subject 1 補足定義
-        extra = subject1_extra.strip()
+        extra = normalize_tags(subject1_extra.strip())
         sub1_extra_formatted = f" {extra}" if extra else ""
 
-        # 4. 男性（Subject 2）定義・保持設定
         if has_male:
             role = male_role.strip() or "male POV hands visible in frame"
             retention = male_retention_desc.strip() or \
-                "partially_preserved - hands interacting naturally with Subject 1"
+                "partially_preserved - hands interacting naturally with <Subject 1>"
             male_def_str = f"\n<Subject 2> is the {role} visible in <Picture 1> (or introduced from the image)."
             male_ret_str = f"\n<Subject 2> (appears in {shot_list_str}): {retention}"
         else:
             male_def_str = ""
             male_ret_str = ""
 
-        # 5. Music
         final_music = resolve_music(enable_music, music_text)
-
-        # 6. 空欄の項目は文ごと省略
-        action = summary_action.strip()
+        action = normalize_tags(summary_action.strip())
         action_str = f" of <Subject 1> {action}" if action else " of <Subject 1>"
-
         camera = camera_style.strip()
         camera_line = f"The target video is filmed in {camera}.\n" if camera else ""
-
         sound = soundscape.strip() or "N/A"
 
-        # 7. テンプレート組み立て
         prompt = f"""subject_definitions:
 <Subject 1> is the {subject_type} in <Picture 1>, with the exact face, the exact hair, the exact clothing, skin tone, and body proportions of <Picture 1>.{sub1_extra_formatted}
 <Picture 1> is the first frame of [Shot 1], showing <Subject 1> in the exact pose, framing, and composition of the reference image.{male_def_str}
@@ -166,4 +147,4 @@ detailed_description:
 overall_soundscape: {sound}
 non_diegetic_music: {final_music}"""
 
-        return (clean_prompt(prompt),)
+        return (clean_prompt(prompt), dialogue_output)
