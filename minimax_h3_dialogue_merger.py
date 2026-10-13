@@ -12,7 +12,7 @@ class MinimaxH3DialogueMerger:
             "required": {
                 "prompt": ("STRING", {"multiline": True, "forceInput": True}),
                 "dialogue": ("STRING", {"multiline": True, "forceInput": True}),
-                "merge_mode": (["append_to_end", "insert_into_shots", "official_format"], {
+                "merge_mode": (["official_format", "append_to_end", "insert_into_shots"], {
                     "default": "official_format",
                     "tooltip": "official_format: 公式ガイド形式 (<d>[Japanese] ...</d>) で各Shot内に安全に統合 / append_to_end: 末尾追加 / insert_into_shots: 簡易挿入"
                 }),
@@ -39,32 +39,25 @@ class MinimaxH3DialogueMerger:
         d_lines = [l.strip() for l in d_text.split("\n") if l.strip()]
 
         if merge_mode == "official_format":
-            # 公式フォーマット: detailed_description 内の [Shot N] 行を探し、その直後にセリフ行を挟み込む
             current_prompt = p_text
             inserted_count = 0
             for line in d_lines:
-                # line の形式: [Shot N] <Subject 1> (S1) says, <d>[Japanese] ...</d>
                 match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)
                 if match:
                     shot_tag, dialogue_content = match.groups()
-                    # プロンプト内から [Shot N] の行全体を正確にマッチさせる
-                    # 例: "[Shot 1] At 00:00.000, ..." または "[Shot 1] ..."
                     pattern = rf"({re.escape(shot_tag)}[^\n]*)"
                     m_shot = re.search(pattern, current_prompt)
                     if m_shot:
                         shot_full_line = m_shot.group(1)
-                        # そのShot行の直下に改行してセリフ行を挿入
                         replacement = f"{shot_full_line}\n  {dialogue_content}"
                         current_prompt = current_prompt.replace(shot_full_line, replacement, 1)
                         inserted_count += 1
 
             if inserted_count == 0:
-                # マッチしない場合はフォールバックとして末尾に追加
                 merged = f"{p_text}\n\ndialogues:\n{d_text}"
                 return (clean_prompt(merged),)
             return (clean_prompt(current_prompt),)
 
-        # 従来の insert_into_shots モード
         current_prompt = p_text
         for line in d_lines:
             match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)

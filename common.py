@@ -52,10 +52,11 @@ def normalize_and_strip_shot(text):
     return normalize_tags(strip_shot_prefix((text or "").strip())).strip()
 
 
-def collect_shots(shot_inputs, dialogue_inputs=None, append_suffix=None, skip_if_contains=None, auto_speech_cue=True, timestamp_step_sec=3.0):
-    """有効な Shot を集め、連番・タイムスタンプ・セリフ（公式フォーマット）を統合して整形する。"""
+def collect_shots_with_duration(shot_inputs, duration_inputs, dialogue_inputs=None, append_suffix=None, skip_if_contains=None, auto_speech_cue=True):
+    """有効な Shot の本文、秒数、セリフを収集し、累積秒数からタイムスタンプを算出して整形する。"""
     bodies = []
     dialogues = []
+    durations = []
     
     for i, (enabled, text) in enumerate(shot_inputs):
         body = normalize_and_strip_shot(text)
@@ -64,21 +65,23 @@ def collect_shots(shot_inputs, dialogue_inputs=None, append_suffix=None, skip_if
             d_text = normalize_tags(strip_shot_prefix((dialogue_inputs[i][1] or "").strip())).strip()
             
         if enabled and body:
-            # セリフがあり、auto_speech_cue が有効なら末尾に発話アクションを追加
             if d_text and auto_speech_cue and "<Subject 1>" in body and "speaks" not in body:
                 body = f"{body} <Subject 1> (S1) speaks a line."
             bodies.append(body)
             dialogues.append(d_text)
+            durations.append(float(duration_inputs[i]) if i < len(duration_inputs) else 3.0)
 
     formatted, names, formatted_dialogues = [], [], []
-    for i, (body, d_text) in enumerate(zip(bodies, dialogues), 1):
-        # タイムスタンプ付与（Shot 2以降）
+    cumulative_sec = 0.0
+
+    for i, (body, d_text, dur) in enumerate(zip(bodies, dialogues, durations), 1):
         prefix = f"[Shot {i}]"
-        if i > 1 and timestamp_step_sec > 0:
-            ts_sec = (i - 1) * timestamp_step_sec
-            mins = int(ts_sec // 60)
-            secs = ts_sec % 60
+        if i > 1:
+            mins = int(cumulative_sec // 60)
+            secs = cumulative_sec % 60
             prefix = f"[Shot {i}] At {mins:02d}:{secs:06.3f},"
+
+        cumulative_sec += max(0.5, dur)
 
         if append_suffix and not (skip_if_contains and skip_if_contains in body):
             body = f"{body} {append_suffix}"
@@ -86,7 +89,6 @@ def collect_shots(shot_inputs, dialogue_inputs=None, append_suffix=None, skip_if
         names.append(f"[Shot {i}]")
         formatted.append(f"{prefix} {body}".strip())
 
-        # セリフの公式フォーマット構築 (<d>[Japanese] ...</d>)
         if d_text:
             formatted_dialogues.append(f"[Shot {i}] <Subject 1> (S1) says, <d>[Japanese] {d_text}</d>")
         else:

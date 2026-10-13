@@ -1,11 +1,11 @@
 try:
     from .common import (
-        collect_shots, resolve_music, clean_prompt,
+        collect_shots_with_duration, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES, _POSSESSIVE
     )
 except ImportError:
     from common import (
-        collect_shots, resolve_music, clean_prompt,
+        collect_shots_with_duration, resolve_music, clean_prompt,
         normalize_tags, SUBJECT_TYPES, _POSSESSIVE
     )
 
@@ -25,20 +25,28 @@ class MinimaxH3PromptGenerator:
                 "enable_music": ("BOOLEAN", {"default": False}),
                 "music_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【BGM】"}),
 
+                # Shot 1
                 "shot1_enable": ("BOOLEAN", {"default": True}),
                 "shot1_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 1】本文"}),
+                "shot1_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
                 "shot1_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 1】セリフ"}),
 
+                # Shot 2
                 "shot2_enable": ("BOOLEAN", {"default": False}),
                 "shot2_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 2】本文"}),
+                "shot2_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
                 "shot2_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 2】セリフ"}),
 
+                # Shot 3
                 "shot3_enable": ("BOOLEAN", {"default": False}),
                 "shot3_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 3】本文"}),
+                "shot3_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
                 "shot3_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 3】セリフ"}),
 
+                # Shot 4
                 "shot4_enable": ("BOOLEAN", {"default": False}),
                 "shot4_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 4】本文"}),
+                "shot4_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
                 "shot4_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 4】セリフ"}),
             },
             "optional": {
@@ -56,23 +64,24 @@ class MinimaxH3PromptGenerator:
         self, summary_action, camera_style, soundscape,
         subject1_extra, has_male, male_role, male_retention_desc,
         enable_music, music_text,
-        shot1_enable, shot1_text, shot1_dialogue,
-        shot2_enable, shot2_text, shot2_dialogue,
-        shot3_enable, shot3_text, shot3_dialogue,
-        shot4_enable, shot4_text, shot4_dialogue,
+        shot1_enable, shot1_text, shot1_duration, shot1_dialogue,
+        shot2_enable, shot2_text, shot2_duration, shot2_dialogue,
+        shot3_enable, shot3_text, shot3_duration, shot3_dialogue,
+        shot4_enable, shot4_text, shot4_duration, shot4_dialogue,
         auto_speech_cue=True, subject_type="woman",
     ):
         shot_inputs = [
             (shot1_enable, shot1_text), (shot2_enable, shot2_text),
             (shot3_enable, shot3_text), (shot4_enable, shot4_text)
         ]
+        duration_inputs = [shot1_duration, shot2_duration, shot3_duration, shot4_duration]
         dialogue_inputs = [
             (shot1_enable, shot1_dialogue), (shot2_enable, shot2_dialogue),
             (shot3_enable, shot3_dialogue), (shot4_enable, shot4_dialogue)
         ]
 
-        formatted_shots, active_shot_names, formatted_dialogues = collect_shots(
-            shot_inputs, dialogue_inputs, auto_speech_cue=auto_speech_cue
+        formatted_shots, active_shot_names, formatted_dialogues = collect_shots_with_duration(
+            shot_inputs, duration_inputs, dialogue_inputs, auto_speech_cue=auto_speech_cue
         )
         dialogue_output = "\n".join([d for d in formatted_dialogues if "<d>" in d])
 
