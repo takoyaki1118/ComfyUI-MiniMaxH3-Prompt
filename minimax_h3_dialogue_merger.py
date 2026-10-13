@@ -41,16 +41,25 @@ class MinimaxH3DialogueMerger:
         if merge_mode == "official_format":
             current_prompt = p_text
             inserted_count = 0
+            
+            # detailed_description: 以降の領域のみを対象にする、または [Shot N] が行頭から始まるものを厳密に狙う
             for line in d_lines:
                 match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)
                 if match:
                     shot_tag, dialogue_content = match.groups()
-                    pattern = rf"({re.escape(shot_tag)}[^\n]*)"
+                    
+                    # 改善: 行頭に [Shot N] があるものを正確にマッチさせる（detailed_description内を想定）
+                    # 例: "[Shot 1] ショット1の動作だよ"
+                    pattern = rf"(^|\n)({re.escape(shot_tag)}[^\n]*)"
                     m_shot = re.search(pattern, current_prompt)
+                    
                     if m_shot:
-                        shot_full_line = m_shot.group(1)
-                        replacement = f"{shot_full_line}\n  {dialogue_content}"
-                        current_prompt = current_prompt.replace(shot_full_line, replacement, 1)
+                        prefix_newline = m_shot.group(1)
+                        shot_full_line = m_shot.group(2)
+                        
+                        # Shot行の直下に改行してセリフ行を挿入
+                        replacement = f"{prefix_newline}{shot_full_line}\n  {dialogue_content}"
+                        current_prompt = current_prompt.replace(f"{prefix_newline}{shot_full_line}", replacement, 1)
                         inserted_count += 1
 
             if inserted_count == 0:
@@ -58,16 +67,18 @@ class MinimaxH3DialogueMerger:
                 return (clean_prompt(merged),)
             return (clean_prompt(current_prompt),)
 
+        # 従来の insert_into_shots モード
         current_prompt = p_text
         for line in d_lines:
             match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)
             if match:
                 shot_tag, content = match.groups()
-                pattern = rf"({re.escape(shot_tag)}[^\n]*)"
+                pattern = rf"(^|\n)({re.escape(shot_tag)}[^\n]*)"
                 m_shot = re.search(pattern, current_prompt)
                 if m_shot:
-                    shot_full_line = m_shot.group(1)
-                    replacement = f"{shot_full_line}\n  - Dialogue: {content}"
-                    current_prompt = current_prompt.replace(shot_full_line, replacement, 1)
+                    prefix_newline = m_shot.group(1)
+                    shot_full_line = m_shot.group(2)
+                    replacement = f"{prefix_newline}{shot_full_line}\n  - Dialogue: {content}"
+                    current_prompt = current_prompt.replace(f"{prefix_newline}{shot_full_line}", replacement, 1)
 
         return (clean_prompt(current_prompt),)
