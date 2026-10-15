@@ -1,8 +1,48 @@
+import re
+
 try:
     from .common import clean_prompt
 except ImportError:
     from common import clean_prompt
-import re
+
+_SECTION_START = "detailed_description:"
+_SECTION_END = "overall_soundscape:"
+
+# モードごとの挿入行の接頭辞
+_PREFIX = {
+    "official_format": "  ",
+    "insert_into_shots": "  - Dialogue: ",
+}
+
+
+def _insert_dialogues(prompt, d_lines, prefix):
+    """detailed_description 内の各 [Shot N] 行の直下にセリフ行を挿入する。
+
+    戻り値: (新しいプロンプト, 処理できた行数)
+    """
+    start = prompt.find(_SECTION_START)
+    head, body = (prompt[:start], prompt[start:]) if start != -1 else ("", prompt)
+    end = body.find(_SECTION_END)
+    body, tail = (body[:end], body[end:]) if end != -1 else (body, "")
+
+    handled = 0
+    for line in d_lines:
+        m = re.match(r"^\[Shot (\d+)\]\s*(.*)$", line)
+        if not m:
+            continue
+        num, content = m.group(1), m.group(2).strip()
+        if not content:
+            continue
+        if content in body:  # 既に挿入済み（再実行対策）
+            handled += 1
+            continue
+        m_shot = re.search(rf"(?m)^\[Shot {num}\][^\n]*", body)
+        if not m_shot:
+            continue
+        body = body[:m_shot.end()] + f"\n{prefix}{content}" + body[m_shot.end():]
+        handled += 1
+
+    return head + body + tail, handled
 
 
 class MinimaxH3DialogueMerger:
@@ -14,9 +54,16 @@ class MinimaxH3DialogueMerger:
                 "dialogue": ("STRING", {"multiline": True, "forceInput": True}),
                 "merge_mode": (["official_format", "append_to_end", "insert_into_shots"], {
                     "default": "official_format",
-                    "tooltip": "official_format: 公式ガイド形式 (<d>[Japanese] ...</d>) で各Shot内に安全に統合 / append_to_end: 末尾追加 / insert_into_shots: 簡易挿入"
+                    "tooltip": (
+                        "official_format: 各Shot直下にセリフ行を挿入 / "
+                        "append_to_end: 末尾に見出し付きで追加 / "
+                        "insert_into_shots: 各Shot直下に '- Dialogue:' 付きで挿入"
+                    ),
                 }),
-                "dialogue_label": ("STRING", {"default": "dialogues", "tooltip": "末尾追加時の見出しラベル"})
+                "dialogue_label": ("STRING", {
+                    "default": "dialogues",
+                    "tooltip": "末尾追加（append_to_end・挿入失敗時のフォールバック）の見出しラベル",
+                }),
             }
         }
 
@@ -28,57 +75,18 @@ class MinimaxH3DialogueMerger:
     def merge(self, prompt, dialogue, merge_mode, dialogue_label):
         p_text = (prompt or "").strip()
         d_text = (dialogue or "").strip()
+        label = (dialogue_label or "dialogues").strip() or "dialogues"
 
         if not d_text:
             return (p_text,)
 
         if merge_mode == "append_to_end":
-            merged = f"{p_text}\n\n{dialogue_label}:\n{d_text}"
-            return (clean_prompt(merged),)
+            return (clean_prompt(f"{p_text}\n\n{label}:\n{d_text}"),)
 
         d_lines = [l.strip() for l in d_text.split("\n") if l.strip()]
+        prefix = _PREFIX.get(merge_mode, _PREFIX["official_format"])
+        merged, handled = _insert_dialogues(p_text, d_lines, prefix)
 
-        if merge_mode == "official_format":
-            current_prompt = p_text
-            inserted_count = 0
-            
-            # detailed_description: 以降の領域のみを対象にする、または [Shot N] が行頭から始まるものを厳密に狙う
-            for line in d_lines:
-                match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)
-                if match:
-                    shot_tag, dialogue_content = match.groups()
-                    
-                    # 改善: 行頭に [Shot N] があるものを正確にマッチさせる（detailed_description内を想定）
-                    # 例: "[Shot 1] ショット1の動作だよ"
-                    pattern = rf"(^|\n)({re.escape(shot_tag)}[^\n]*)"
-                    m_shot = re.search(pattern, current_prompt)
-                    
-                    if m_shot:
-                        prefix_newline = m_shot.group(1)
-                        shot_full_line = m_shot.group(2)
-                        
-                        # Shot行の直下に改行してセリフ行を挿入
-                        replacement = f"{prefix_newline}{shot_full_line}\n  {dialogue_content}"
-                        current_prompt = current_prompt.replace(f"{prefix_newline}{shot_full_line}", replacement, 1)
-                        inserted_count += 1
-
-            if inserted_count == 0:
-                merged = f"{p_text}\n\ndialogues:\n{d_text}"
-                return (clean_prompt(merged),)
-            return (clean_prompt(current_prompt),)
-
-        # 従来の insert_into_shots モード
-        current_prompt = p_text
-        for line in d_lines:
-            match = re.match(r"^(\[Shot \d+\])\s*(.*)", line)
-            if match:
-                shot_tag, content = match.groups()
-                pattern = rf"(^|\n)({re.escape(shot_tag)}[^\n]*)"
-                m_shot = re.search(pattern, current_prompt)
-                if m_shot:
-                    prefix_newline = m_shot.group(1)
-                    shot_full_line = m_shot.group(2)
-                    replacement = f"{prefix_newline}{shot_full_line}\n  - Dialogue: {content}"
-                    current_prompt = current_prompt.replace(f"{prefix_newline}{shot_full_line}", replacement, 1)
-
-        return (clean_prompt(current_prompt),)
+        if handled == 0:  # 1行も挿入できなければ末尾に退避
+            merged = f"{p_text}\n\n{label}:\n{d_text}"
+        return (clean_prompt(merged),)

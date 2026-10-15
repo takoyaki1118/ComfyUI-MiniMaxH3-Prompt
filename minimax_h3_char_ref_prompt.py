@@ -1,89 +1,58 @@
 try:
     from .common import (
-        collect_shots_with_duration, resolve_music, clean_prompt,
-        normalize_tags, SUBJECT_TYPES
+        collect_from_kwargs, dialogue_lines_only, build_status, build_shot_inputs,
+        resolve_music, clean_prompt, normalize_tags, SUBJECT_TYPES,
     )
 except ImportError:
     from common import (
-        collect_shots_with_duration, resolve_music, clean_prompt,
-        normalize_tags, SUBJECT_TYPES
+        collect_from_kwargs, dialogue_lines_only, build_status, build_shot_inputs,
+        resolve_music, clean_prompt, normalize_tags, SUBJECT_TYPES,
     )
 
 
 class MinimaxH3CharRefPromptGenerator:
+    """キャラクターリファレンス参照型。"""
+
     @classmethod
     def INPUT_TYPES(s):
+        required = {
+            "summary_action": ("STRING", {"multiline": True, "default": "", "placeholder": "【動画全体の動き】"}),
+            "camera_style": ("STRING", {"multiline": True, "default": "", "placeholder": "【カメラ・画作り】"}),
+            "soundscape": ("STRING", {"multiline": True, "default": "", "placeholder": "【環境音・効果音】"}),
+            "include_clothing": ("BOOLEAN", {"default": True, "label_on": "clothing enabled", "label_off": "clothing ignored"}),
+            "character_extra": ("STRING", {"multiline": True, "default": "", "placeholder": "【キャラクターの補足】"}),
+            "enable_music": ("BOOLEAN", {"default": False}),
+            "music_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【BGM】"}),
+        }
+        required.update(build_shot_inputs())
         return {
-            "required": {
-                "summary_action": ("STRING", {"multiline": True, "default": "", "placeholder": "【動画全体の動き】"}),
-                "camera_style": ("STRING", {"multiline": True, "default": "", "placeholder": "【カメラ・画作り】"}),
-                "soundscape": ("STRING", {"multiline": True, "default": "", "placeholder": "【環境音・効果音】"}),
-                "include_clothing": ("BOOLEAN", {"default": True, "label_on": "clothing enabled", "label_off": "clothing ignored"}),
-                "character_extra": ("STRING", {"multiline": True, "default": "", "placeholder": "【キャラクターの補足】"}),
-                "enable_music": ("BOOLEAN", {"default": False}),
-                "music_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【BGM】"}),
-
-                "shot1_enable": ("BOOLEAN", {"default": True}),
-                "shot1_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 1】本文"}),
-                "shot1_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
-                "shot1_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 1】セリフ"}),
-
-                "shot2_enable": ("BOOLEAN", {"default": False}),
-                "shot2_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 2】本文"}),
-                "shot2_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
-                "shot2_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 2】セリフ"}),
-
-                "shot3_enable": ("BOOLEAN", {"default": False}),
-                "shot3_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 3】本文"}),
-                "shot3_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
-                "shot3_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 3】セリフ"}),
-
-                "shot4_enable": ("BOOLEAN", {"default": False}),
-                "shot4_text": ("STRING", {"multiline": True, "default": "", "placeholder": "【Shot 4】本文"}),
-                "shot4_duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 15.0, "step": 0.5}),
-                "shot4_dialogue": ("STRING", {"multiline": False, "default": "", "placeholder": "【Shot 4】セリフ"}),
-            },
+            "required": required,
             "optional": {
                 "auto_speech_cue": ("BOOLEAN", {"default": True}),
                 "subject_type": (SUBJECT_TYPES, {"default": "woman"}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("prompt", "dialogue")
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("prompt", "dialogue", "status")
     FUNCTION = "generate_prompt"
     CATEGORY = "MiniMaxH3"
 
     def generate_prompt(
         self, summary_action, camera_style, soundscape,
         include_clothing, character_extra, enable_music, music_text,
-        shot1_enable, shot1_text, shot1_duration, shot1_dialogue,
-        shot2_enable, shot2_text, shot2_duration, shot2_dialogue,
-        shot3_enable, shot3_text, shot3_duration, shot3_dialogue,
-        shot4_enable, shot4_text, shot4_duration, shot4_dialogue,
-        auto_speech_cue=True, subject_type="woman"
+        auto_speech_cue=True, subject_type="woman", **kw
     ):
-        shot_inputs = [
-            (shot1_enable, shot1_text), (shot2_enable, shot2_text),
-            (shot3_enable, shot3_text), (shot4_enable, shot4_text)
-        ]
-        duration_inputs = [shot1_duration, shot2_duration, shot3_duration, shot4_duration]
-        dialogue_inputs = [
-            (shot1_enable, shot1_dialogue), (shot2_enable, shot2_dialogue),
-            (shot3_enable, shot3_dialogue), (shot4_enable, shot4_dialogue)
-        ]
-
-        formatted_shots, active_shot_names, formatted_dialogues = collect_shots_with_duration(
-            shot_inputs, duration_inputs, dialogue_inputs, auto_speech_cue=auto_speech_cue
-        )
-        dialogue_output = "\n".join([d for d in formatted_dialogues if "<d>" in d])
+        formatted_shots, names, fdialogues, total, warns = collect_from_kwargs(kw, auto_speech_cue)
+        dialogue_output = dialogue_lines_only(fdialogues)
 
         if not formatted_shots:
             formatted_shots = ["[Shot 1] <Subject 1> appears in the scene."]
-            active_shot_names = ["[Shot 1]"]
+            names = ["[Shot 1]"]
+            warns.append("有効なShotがないためフォールバック文を使用")
 
         shots_content = "\n\n".join(formatted_shots)
-        shot_list_str = ", ".join(active_shot_names)
+        shot_list_str = ", ".join(names)
 
         clothing_part = ", clothing" if include_clothing else ""
         extra = normalize_tags(character_extra.strip())
@@ -111,4 +80,4 @@ detailed_description:
 overall_soundscape: {sound}
 non_diegetic_music: {final_music}"""
 
-        return (clean_prompt(prompt), dialogue_output)
+        return (clean_prompt(prompt), dialogue_output, build_status(total, warns))

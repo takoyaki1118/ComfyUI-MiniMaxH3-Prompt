@@ -5,65 +5,63 @@ print("Initializing MiniMax-H3 Prompt Generator Nodes...")
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-# 1. ファーストフレーム参照型ノード
-try:
-    from .minimax_h3_prompt import MinimaxH3PromptGenerator
-    NODE_CLASS_MAPPINGS["MinimaxH3PromptGenerator"] = MinimaxH3PromptGenerator
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3PromptGenerator"] = "MiniMax-H3 Prompt Generator"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 Prompt Generator node: {e}")
-    traceback.print_exc()
 
-# 2. キャラクターリファレンス参照型ノード
-try:
-    from .minimax_h3_char_ref_prompt import MinimaxH3CharRefPromptGenerator
-    NODE_CLASS_MAPPINGS["MinimaxH3CharRefPromptGenerator"] = MinimaxH3CharRefPromptGenerator
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3CharRefPromptGenerator"] = "MiniMax-H3 Char Ref Prompt Generator"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 Char Ref Prompt Generator node: {e}")
-    traceback.print_exc()
+def _register(label, loader):
+    """loader() は {クラス名: (クラス, 表示名)} を返す。失敗しても他ノードの登録は続行する。"""
+    try:
+        for name, (cls, display) in loader().items():
+            NODE_CLASS_MAPPINGS[name] = cls
+            NODE_DISPLAY_NAME_MAPPINGS[name] = display
+    except Exception as e:
+        print(f"Error initializing {label}: {e}")
+        traceback.print_exc()
 
-# 3. キャラクターリファレンス ＋ 参照動画（モーション）型ノード
-try:
-    from .minimax_h3_char_ref_motion_prompt import MinimaxH3CharRefMotionPromptGenerator
-    NODE_CLASS_MAPPINGS["MinimaxH3CharRefMotionPromptGenerator"] = MinimaxH3CharRefMotionPromptGenerator
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3CharRefMotionPromptGenerator"] = "MiniMax-H3 Char Ref + Motion Prompt Generator"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 Char Ref + Motion Prompt Generator node: {e}")
-    traceback.print_exc()
 
-# 4. キャラクターリファレンス ＋ ファーストフレーム指定型ノード
-try:
-    from .minimax_h3_char_ref_first_frame_prompt import MinimaxH3CharRefFirstFramePromptGenerator
-    NODE_CLASS_MAPPINGS["MinimaxH3CharRefFirstFramePromptGenerator"] = MinimaxH3CharRefFirstFramePromptGenerator
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3CharRefFirstFramePromptGenerator"] = "MiniMax-H3 Char Ref + First Frame Prompt Generator"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 Char Ref + First Frame Prompt Generator node: {e}")
-    traceback.print_exc()
+def _first_frame():
+    from .minimax_h3_prompt import MinimaxH3PromptGenerator as C
+    return {"MinimaxH3PromptGenerator": (C, "MiniMax-H3 Prompt Generator")}
 
-# 5. LLMヘルパー（System Prompt Builder & Output Parser）ノード
-try:
-    from .minimax_h3_llm_helper import (
-        MinimaxH3SystemPromptBuilder,
-        MinimaxH3LLMOutputParser,
-    )
-    NODE_CLASS_MAPPINGS["MinimaxH3SystemPromptBuilder"] = MinimaxH3SystemPromptBuilder
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3SystemPromptBuilder"] = "MiniMax-H3 System Prompt Builder"
 
-    NODE_CLASS_MAPPINGS["MinimaxH3LLMOutputParser"] = MinimaxH3LLMOutputParser
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3LLMOutputParser"] = "MiniMax-H3 LLM Output Parser"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 LLM Helper nodes: {e}")
-    traceback.print_exc()
+def _last_frame():
+    from .minimax_h3_last_frame_prompt import MinimaxH3LastFramePromptGenerator as C
+    return {"MinimaxH3LastFramePromptGenerator": (C, "MiniMax-H3 Last Frame (L2VA) Prompt Generator")}
 
-# 6. Dialogue Merger ノード
-try:
-    from .minimax_h3_dialogue_merger import MinimaxH3DialogueMerger
-    NODE_CLASS_MAPPINGS["MinimaxH3DialogueMerger"] = MinimaxH3DialogueMerger
-    NODE_DISPLAY_NAME_MAPPINGS["MinimaxH3DialogueMerger"] = "MiniMax-H3 Dialogue Merger"
-except Exception as e:
-    print(f"Error initializing MiniMax-H3 Dialogue Merger node: {e}")
-    traceback.print_exc()
+
+def _char_ref():
+    from .minimax_h3_char_ref_prompt import MinimaxH3CharRefPromptGenerator as C
+    return {"MinimaxH3CharRefPromptGenerator": (C, "MiniMax-H3 Char Ref Prompt Generator")}
+
+
+def _char_ref_motion():
+    from .minimax_h3_char_ref_motion_prompt import MinimaxH3CharRefMotionPromptGenerator as C
+    return {"MinimaxH3CharRefMotionPromptGenerator": (C, "MiniMax-H3 Char Ref + Motion Prompt Generator")}
+
+
+def _char_ref_first_frame():
+    from .minimax_h3_char_ref_first_frame_prompt import MinimaxH3CharRefFirstFramePromptGenerator as C
+    return {"MinimaxH3CharRefFirstFramePromptGenerator": (C, "MiniMax-H3 Char Ref + First Frame Prompt Generator")}
+
+
+def _llm_helper():
+    from .minimax_h3_llm_helper import MinimaxH3SystemPromptBuilder as B, MinimaxH3LLMOutputParser as P
+    return {
+        "MinimaxH3SystemPromptBuilder": (B, "MiniMax-H3 System Prompt Builder"),
+        "MinimaxH3LLMOutputParser": (P, "MiniMax-H3 LLM Output Parser"),
+    }
+
+
+def _dialogue_merger():
+    from .minimax_h3_dialogue_merger import MinimaxH3DialogueMerger as C
+    return {"MinimaxH3DialogueMerger": (C, "MiniMax-H3 Dialogue Merger")}
+
+
+_register("MiniMax-H3 Prompt Generator (first frame)", _first_frame)
+_register("MiniMax-H3 Last Frame (L2VA) Prompt Generator", _last_frame)
+_register("MiniMax-H3 Char Ref Prompt Generator", _char_ref)
+_register("MiniMax-H3 Char Ref + Motion Prompt Generator", _char_ref_motion)
+_register("MiniMax-H3 Char Ref + First Frame Prompt Generator", _char_ref_first_frame)
+_register("MiniMax-H3 LLM Helper nodes", _llm_helper)
+_register("MiniMax-H3 Dialogue Merger", _dialogue_merger)
 
 print(f"Successfully initialized {len(NODE_CLASS_MAPPINGS)} nodes for MiniMax-H3 Prompt Generator.")
 
